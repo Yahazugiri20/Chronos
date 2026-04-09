@@ -1,9 +1,11 @@
-import streamlit as st
+from flask import Flask, render_template_with_string, request, jsonify
 import os
 from web3 import Web3
 from dotenv import load_dotenv
 
 load_dotenv()
+
+app = Flask(__name__) # Ini yang dicari Vercel!
 
 # --- CONFIG ---
 RPC_URL = os.getenv("RPC_URL")
@@ -29,38 +31,84 @@ ABI = [
 
 contract = w3.eth.contract(address=CONTRACT_ADDRESS, abi=ABI)
 
-# --- UI STREAMLIT ---
-st.set_page_config(page_title="Chronos AI Agent", page_icon="🏛️")
-st.title("🏛️ Chronos AI Agent")
-st.subheader("Historical Truth Verification on Base")
+HTML_TEMPLATE = """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Chronos AI Agent</title>
+    <style>
+        body { font-family: sans-serif; background: #121212; color: white; text-align: center; padding: 50px; }
+        .card { background: #1e1e1e; padding: 30px; border-radius: 15px; display: inline-block; width: 80%; max-width: 500px; border: 1px solid #333; }
+        textarea { width: 100%; height: 100px; background: #222; color: white; border: 1px solid #444; padding: 10px; margin-top: 10px; }
+        button { background: #0052ff; color: white; border: none; padding: 15px 30px; margin-top: 20px; cursor: pointer; border-radius: 5px; font-weight: bold; }
+        button:hover { background: #0042cc; }
+        #status { margin-top: 20px; color: #aaa; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>🏛️ Chronos AI</h1>
+        <p>Verify Historical Truth on Base</p>
+        <textarea id="claim" placeholder="Enter historical claim..."></textarea><br>
+        <button onclick="verify()">Verify & Archive</button>
+        <div id="status"></div>
+    </div>
 
-claim_input = st.text_area("Enter historical claim to archive:", placeholder="e.g. The Battle of Talas (751 AD)...")
-
-if st.button("Verify & Archive on Base"):
-    if claim_input:
-        with st.status("Chronos AI is analyzing...", expanded=True) as status:
-            # 1. Logic AI (Nanti kita ganti pake API beneran di sini)
-            st.write("Checking historical sources...")
-            confidence_score = 98 
-            proof_reference = "ipfs://chronos-v1-verified"
+    <script>
+        async function verify() {
+            const claim = document.getElementById('claim').value;
+            const statusDiv = document.getElementById('status');
+            if(!claim) return alert("Enter a claim!");
             
-            # 2. Blockchain Transaction
-            st.write("Broadcasting to Base Sepolia...")
-            nonce = w3.eth.get_transaction_count(account.address)
-            tx = contract.functions.verifyClaim(claim_input, confidence_score, proof_reference).build_transaction({
-                'from': account.address,
-                'nonce': nonce,
-                'gas': 300000,
-                'gasPrice': w3.to_wei('0.05', 'gwei')
-            })
-
-            signed_tx = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
-            tx_hash = w3.eth.send_raw_transaction(signed_tx.raw_transaction)
+            statusDiv.innerHTML = "⏳ Chronos is analyzing & broadcasting...";
             
-            status.update(label="Success! Secured On-Chain", state="complete", expanded=False)
+            const res = await fetch('/verify', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({claim})
+            });
+            const data = await res.json();
+            
+            if(data.success) {
+                statusDiv.innerHTML = `✅ <b>Success!</b><br><br>Tx: <a href="https://sepolia.basescan.org/tx/${data.tx_hash}" target="_blank" style="color:#0052ff">${data.tx_hash}</a>`;
+            } else {
+                statusDiv.innerHTML = "❌ Error: " + data.error;
+            }
+        }
+    </script>
+</body>
+</html>
+"""
 
-        st.success(f"✅ Historical Truth Secured!")
-        st.info(f"🔗 Transaction Hash: {w3.to_hex(tx_hash)}")
-        st.link_button("View on Explorer", f"https://sepolia.basescan.org/tx/{w3.to_hex(tx_hash)}")
-    else:
-        st.error("Please enter a claim first!")
+@app.route('/')
+def home():
+    from flask import render_template_string
+    return render_template_string(HTML_TEMPLATE)
+
+@app.route('/verify', methods=['POST'])
+def verify():
+    try:
+        data = request.json
+        claim = data.get('claim')
+        
+        # Logic AI Simulasi
+        confidence_score = 98
+        proof_hash = "ipfs://verified_chronos"
+
+        nonce = w3.eth.get_transaction_count(account.address)
+        tx = contract.functions.verifyClaim(claim, confidence_score, proof_hash).build_transaction({
+            'from': account.address,
+            'nonce': nonce,
+            'gas': 300000,
+            'gasPrice': w3.to_wei('0.05', 'gwei')
+        })
+
+        signed_tx = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
+        tx_hash = w3.eth.send_raw_transaction(signed_tx.raw_transaction)
+        
+        return jsonify({"success": True, "tx_hash": w3.to_hex(tx_hash)})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+if __name__ == '__main__':
+    app.run(debug=True)
