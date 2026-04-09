@@ -1,4 +1,4 @@
-echo "flask
+flask
 web3
 python-dotenv
-requests" > requirements.txt
+requests
