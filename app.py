@@ -13,7 +13,6 @@ CONTRACT_ADDRESS = os.getenv("CONTRACT_ADDRESS")
 PINATA_JWT = os.getenv("PINATA_JWT")
 
 w3 = Web3(Web3.HTTPProvider(RPC_URL))
-# Admin account buat bayarin gas (untuk sekarang)
 admin_account = w3.eth.account.from_key(PRIVATE_KEY)
 
 ABI = [{"inputs":[{"internalType":"string","name":"_claim","type":"string"},{"internalType":"uint256","name":"_score","type":"uint256"},{"internalType":"string","name":"_hash","type":"string"}],"name":"verifyClaim","outputs":[],"stateMutability":"nonpayable","type":"function"}]
@@ -38,31 +37,27 @@ HTML_TEMPLATE = """
         :root { --base-blue: #0052ff; --dark-bg: #000; --card-bg: #111; --border: #222; }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--dark-bg); color: white; margin: 0; }
         
-        /* Navbar */
         .nav { display: flex; justify-content: space-between; align-items: center; padding: 20px 40px; border-bottom: 1px solid var(--border); background: rgba(0,0,0,0.8); backdrop-filter: blur(10px); position: sticky; top: 0; z-index: 100; }
         .logo { font-weight: 800; font-size: 1.5em; letter-spacing: -1px; }
         .btn-connect { background: #fff; color: #000; border: none; padding: 10px 20px; border-radius: 50px; font-weight: bold; cursor: pointer; transition: 0.3s; }
         .btn-connect:hover { background: var(--base-blue); color: #fff; }
 
-        /* Input Section */
         .hero { padding: 80px 20px; text-align: center; background: radial-gradient(circle at center, #0052ff10 0%, transparent 70%); }
         .input-card { background: var(--card-bg); max-width: 550px; margin: auto; padding: 40px; border-radius: 24px; border: 1px solid var(--border); box-shadow: 0 20px 40px rgba(0,0,0,0.4); }
         textarea { width: 100%; height: 100px; background: #050505; color: white; border: 1px solid #333; border-radius: 12px; padding: 15px; box-sizing: border-box; font-size: 16px; margin-bottom: 20px; resize: none; }
         .file-label { display: block; text-align: left; color: #888; font-size: 12px; margin-bottom: 8px; }
         .btn-blast { background: var(--base-blue); color: white; border: none; padding: 18px; width: 100%; border-radius: 12px; font-weight: bold; cursor: pointer; font-size: 16px; transition: 0.3s; }
-        .btn-blast:disabled { background: #333; cursor: not-allowed; }
 
-        /* Ledger Gallery */
         .archives { max-width: 1100px; margin: 60px auto; padding: 0 20px; }
         .section-title { font-size: 24px; margin-bottom: 30px; display: flex; align-items: center; gap: 10px; }
         .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 30px; }
-        .archive-card { background: var(--card-bg); border-radius: 20px; overflow: hidden; border: 1px solid var(--border); transition: 0.3s; }
+        .archive-card { background: var(--card-bg); border-radius: 20px; overflow: hidden; border: 1px solid var(--border); transition: 0.3s; text-align: left; }
         .archive-card:hover { transform: translateY(-5px); border-color: var(--base-blue); }
         .card-img { width: 100%; height: 200px; object-fit: cover; }
         .card-content { padding: 20px; }
         .addr-tag { font-family: monospace; color: #0052ff; font-size: 11px; background: rgba(0,82,255,0.1); padding: 4px 8px; border-radius: 4px; display: inline-block; margin-bottom: 12px; }
         .card-desc { font-size: 14px; line-height: 1.6; color: #ccc; margin: 0 0 20px 0; }
-        .card-footer { display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #222; pt: 15px; padding-top: 15px; }
+        .card-footer { display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #222; padding-top: 15px; }
     </style>
 </head>
 <body>
@@ -75,13 +70,13 @@ HTML_TEMPLATE = """
     <div class="hero">
         <div class="input-card">
             <h2 style="margin:0 0 10px 0">Archive Evidence</h2>
-            <p style="color:#888; font-size:14px; margin-bottom:30px;">Historical integrity powered by Llama 3 & Base</p>
-            
-            <textarea id="claim" placeholder="What historical event are you archiving today?"></textarea>
-            
+            <p style="color:#888; font-size:14px; margin-bottom:30px; letter-spacing: 0.5px;">Historical Integrity • <b>Build on Base</b></p>
+
+            <textarea id="claim" placeholder="Describe the historical event you want to archive..."></textarea>
+
             <span class="file-label">ATTACH SOURCE DOCUMENT / IMAGE</span>
             <input type="file" id="imageFile" accept="image/*" style="display:block; margin-bottom:25px; color:#888;">
-            
+
             <button class="btn-blast" id="btnBlast" onclick="archive()">Blast to Blockchain</button>
             <div id="status" style="margin-top:20px; font-size:13px; color:#888;"></div>
         </div>
@@ -103,7 +98,7 @@ HTML_TEMPLATE = """
                     document.getElementById('btnConnect').innerHTML = userAddress.substring(0,6) + "..." + userAddress.substring(38);
                     renderGallery();
                 } catch (e) { console.error(e); }
-            } else { alert("Install MetaMask mamen!"); }
+            } else { alert("Please install MetaMask to continue."); }
         }
 
         function renderGallery() {
@@ -125,15 +120,15 @@ HTML_TEMPLATE = """
         }
 
         async function archive() {
-            if(!userAddress) return alert("Connect Wallet dulu mamen!");
-            
+            if(!userAddress) return alert("Please connect your wallet first!");
+
             const claim = document.getElementById('claim').value;
             const file = document.getElementById('imageFile').files[0];
             const status = document.getElementById('status');
-            
-            if(!claim || !file) return alert("Fill everything!");
 
-            status.innerHTML = "⏳ Phase 1: Uploading to IPFS...";
+            if(!claim || !file) return alert("Please provide both a claim and an image.");
+
+            status.innerHTML = "⏳ Phase 1: Uploading evidence to IPFS...";
             const fd = new FormData();
             fd.append('claim', claim);
             fd.append('file', file);
@@ -141,9 +136,9 @@ HTML_TEMPLATE = """
             try {
                 const res = await fetch('/verify', {method:'POST', body:fd});
                 const d = await res.json();
-                
+
                 if(d.success) {
-                    status.innerHTML = "✅ ARCHIVED ON BASE";
+                    status.innerHTML = "✅ SUCCESSFULLY ARCHIVED ON BASE";
                     const history = JSON.parse(localStorage.getItem('chronos_final') || '[]');
                     history.push({
                         claim: claim,
@@ -155,7 +150,7 @@ HTML_TEMPLATE = """
                     localStorage.setItem('chronos_final', JSON.stringify(history));
                     renderGallery();
                     document.getElementById('claim').value = "";
-                } else { status.innerHTML = "❌ " + d.error; }
+                } else { status.innerHTML = "❌ Error: " + d.error; }
             } catch(e) { status.innerHTML = "❌ Network Error"; }
         }
         renderGallery();
@@ -174,8 +169,7 @@ def verify():
         claim = request.form.get('claim')
         file = request.files.get('file')
         ipfs_url = upload_to_ipfs(file)
-        
-        # Eksekusi transaksi dari sisi server (Admin pays gas)
+
         nonce = w3.eth.get_transaction_count(admin_account.address)
         tx = contract.functions.verifyClaim(claim, 98, ipfs_url).build_transaction({
             'from': admin_account.address,
@@ -185,7 +179,7 @@ def verify():
         })
         signed = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
         tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
-        
+
         return jsonify({"success": True, "tx_hash": w3.to_hex(tx_hash), "ipfs_url": ipfs_url})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
