@@ -13,7 +13,8 @@ CONTRACT_ADDRESS = os.getenv("CONTRACT_ADDRESS")
 PINATA_JWT = os.getenv("PINATA_JWT")
 
 w3 = Web3(Web3.HTTPProvider(RPC_URL))
-account = w3.eth.account.from_key(PRIVATE_KEY)
+# Admin account buat bayarin gas (untuk sekarang)
+admin_account = w3.eth.account.from_key(PRIVATE_KEY)
 
 ABI = [{"inputs":[{"internalType":"string","name":"_claim","type":"string"},{"internalType":"uint256","name":"_score","type":"uint256"},{"internalType":"string","name":"_hash","type":"string"}],"name":"verifyClaim","outputs":[],"stateMutability":"nonpayable","type":"function"}]
 contract = w3.eth.contract(address=CONTRACT_ADDRESS, abi=ABI)
@@ -31,81 +32,108 @@ HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Chronos | Public History Ledger</title>
+    <title>Chronos | AI Historical Ledger</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
-        :root { --base-blue: #0052ff; --dark-card: #111; --border: #222; }
-        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #000; color: white; margin: 0; }
+        :root { --base-blue: #0052ff; --dark-bg: #000; --card-bg: #111; --border: #222; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--dark-bg); color: white; margin: 0; }
         
-        /* Layout Layer 1: Input Section */
-        .hero { padding: 60px 20px; border-bottom: 1px solid var(--border); background: radial-gradient(circle at top, #0052ff15 0%, #000 70%); }
-        .input-card { background: var(--dark-card); max-width: 500px; margin: auto; padding: 30px; border-radius: 20px; border: 1px solid #333; }
-        textarea { width: 100%; height: 80px; background: #000; color: white; border: 1px solid #333; border-radius: 10px; padding: 12px; box-sizing: border-box; font-size: 14px; }
-        .btn-main { background: var(--base-blue); color: white; border: none; padding: 14px; width: 100%; border-radius: 10px; font-weight: bold; cursor: pointer; margin-top: 20px; font-size: 16px; }
-        
-        /* Layout Layer 2: Archives Section */
-        .archives-container { max-width: 1000px; margin: 50px auto; padding: 0 20px; }
-        .gallery-header { display: flex; align-items: center; margin-bottom: 30px; }
-        .gallery-header h2 { margin: 0; font-size: 1.5em; letter-spacing: -0.5px; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 25px; }
-        
-        .card-archived { background: var(--dark-card); border-radius: 16px; overflow: hidden; border: 1px solid var(--border); transition: 0.2s; }
-        .card-archived:hover { border-color: var(--base-blue); transform: translateY(-3px); }
-        .card-img { width: 100%; height: 180px; object-fit: cover; background: #1a1a1a; }
-        .card-body { padding: 20px; }
-        .card-meta { font-size: 11px; color: #666; font-family: monospace; margin-bottom: 10px; display: block; overflow: hidden; text-overflow: ellipsis; }
-        .card-text { font-size: 14px; line-height: 1.5; color: #ccc; margin-bottom: 15px; }
-        .badge { background: #0052ff15; color: var(--base-blue); padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: bold; }
+        /* Navbar */
+        .nav { display: flex; justify-content: space-between; align-items: center; padding: 20px 40px; border-bottom: 1px solid var(--border); background: rgba(0,0,0,0.8); backdrop-filter: blur(10px); position: sticky; top: 0; z-index: 100; }
+        .logo { font-weight: 800; font-size: 1.5em; letter-spacing: -1px; }
+        .btn-connect { background: #fff; color: #000; border: none; padding: 10px 20px; border-radius: 50px; font-weight: bold; cursor: pointer; transition: 0.3s; }
+        .btn-connect:hover { background: var(--base-blue); color: #fff; }
+
+        /* Input Section */
+        .hero { padding: 80px 20px; text-align: center; background: radial-gradient(circle at center, #0052ff10 0%, transparent 70%); }
+        .input-card { background: var(--card-bg); max-width: 550px; margin: auto; padding: 40px; border-radius: 24px; border: 1px solid var(--border); box-shadow: 0 20px 40px rgba(0,0,0,0.4); }
+        textarea { width: 100%; height: 100px; background: #050505; color: white; border: 1px solid #333; border-radius: 12px; padding: 15px; box-sizing: border-box; font-size: 16px; margin-bottom: 20px; resize: none; }
+        .file-label { display: block; text-align: left; color: #888; font-size: 12px; margin-bottom: 8px; }
+        .btn-blast { background: var(--base-blue); color: white; border: none; padding: 18px; width: 100%; border-radius: 12px; font-weight: bold; cursor: pointer; font-size: 16px; transition: 0.3s; }
+        .btn-blast:disabled { background: #333; cursor: not-allowed; }
+
+        /* Ledger Gallery */
+        .archives { max-width: 1100px; margin: 60px auto; padding: 0 20px; }
+        .section-title { font-size: 24px; margin-bottom: 30px; display: flex; align-items: center; gap: 10px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 30px; }
+        .archive-card { background: var(--card-bg); border-radius: 20px; overflow: hidden; border: 1px solid var(--border); transition: 0.3s; }
+        .archive-card:hover { transform: translateY(-5px); border-color: var(--base-blue); }
+        .card-img { width: 100%; height: 200px; object-fit: cover; }
+        .card-content { padding: 20px; }
+        .addr-tag { font-family: monospace; color: #0052ff; font-size: 11px; background: rgba(0,82,255,0.1); padding: 4px 8px; border-radius: 4px; display: inline-block; margin-bottom: 12px; }
+        .card-desc { font-size: 14px; line-height: 1.6; color: #ccc; margin: 0 0 20px 0; }
+        .card-footer { display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #222; pt: 15px; padding-top: 15px; }
     </style>
 </head>
 <body>
 
+    <nav class="nav">
+        <div class="logo">🏛️ CHRONOS</div>
+        <button class="btn-connect" id="btnConnect" onclick="connectWallet()">Connect Wallet</button>
+    </nav>
+
     <div class="hero">
         <div class="input-card">
-            <h2 style="margin-top:0">🏛️ Chronos Archive</h2>
-            <p style="color:#666; font-size: 13px; margin-bottom: 20px;">Deploy historical evidence to Base Sepolia Network</p>
-            <textarea id="claim" placeholder="Describe the historical claim..."></textarea>
-            <input type="file" id="imageFile" accept="image/*" style="margin-top:20px; font-size: 12px; color: #888;">
-            <button class="btn-main" onclick="archive()">Blast to Blockchain</button>
-            <div id="status" style="margin-top:15px; font-size: 12px;"></div>
+            <h2 style="margin:0 0 10px 0">Archive Evidence</h2>
+            <p style="color:#888; font-size:14px; margin-bottom:30px;">Historical integrity powered by Llama 3 & Base</p>
+            
+            <textarea id="claim" placeholder="What historical event are you archiving today?"></textarea>
+            
+            <span class="file-label">ATTACH SOURCE DOCUMENT / IMAGE</span>
+            <input type="file" id="imageFile" accept="image/*" style="display:block; margin-bottom:25px; color:#888;">
+            
+            <button class="btn-blast" id="btnBlast" onclick="archive()">Blast to Blockchain</button>
+            <div id="status" style="margin-top:20px; font-size:13px; color:#888;"></div>
         </div>
     </div>
 
-    <div class="archives-container">
-        <div class="gallery-header">
-            <h2>📜 Verified Historical Ledger</h2>
-        </div>
-        <div id="archiveGrid" class="grid">
-            </div>
+    <div class="archives">
+        <div class="section-title">📜 Verified Historical Ledger</div>
+        <div id="archiveGrid" class="grid"></div>
     </div>
 
     <script>
-        const MY_ADDRESS = "{{ wallet_address }}"; // Injected from Python
+        let userAddress = null;
+
+        async function connectWallet() {
+            if (window.ethereum) {
+                try {
+                    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                    userAddress = accounts[0];
+                    document.getElementById('btnConnect').innerHTML = userAddress.substring(0,6) + "..." + userAddress.substring(38);
+                    renderGallery();
+                } catch (e) { console.error(e); }
+            } else { alert("Install MetaMask mamen!"); }
+        }
 
         function renderGallery() {
             const grid = document.getElementById('archiveGrid');
-            const data = JSON.parse(localStorage.getItem('chronos_v2') || '[]');
+            const data = JSON.parse(localStorage.getItem('chronos_final') || '[]');
             grid.innerHTML = data.reverse().map(item => `
-                <div class="card-archived">
+                <div class="archive-card">
                     <img src="${item.img}" class="card-img">
-                    <div class="card-body">
-                        <span class="card-meta">SUBMITTED BY: ${item.address}</span>
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                            <span class="badge">SCORE: ${item.score}%</span>
-                            <a href="https://sepolia.basescan.org/tx/${item.tx}" target="_blank" style="font-size:11px; color:var(--base-blue); text-decoration:none;">EXPLORER ↗</a>
+                    <div class="card-content">
+                        <span class="addr-tag">By: ${item.address}</span>
+                        <p class="card-desc">${item.claim}</p>
+                        <div class="card-footer">
+                            <span style="font-size:12px; font-weight:bold; color:#00ff88">SCORE: ${item.score}%</span>
+                            <a href="https://sepolia.basescan.org/tx/${item.tx}" target="_blank" style="color:var(--base-blue); text-decoration:none; font-size:12px; font-weight:bold;">EXPLORER ↗</a>
                         </div>
-                        <p class="card-text">${item.claim}</p>
                     </div>
                 </div>
             `).join('');
         }
 
         async function archive() {
+            if(!userAddress) return alert("Connect Wallet dulu mamen!");
+            
             const claim = document.getElementById('claim').value;
             const file = document.getElementById('imageFile').files[0];
             const status = document.getElementById('status');
+            
             if(!claim || !file) return alert("Fill everything!");
 
-            status.innerHTML = "⏳ Initializing IPFS & AI Analysis...";
+            status.innerHTML = "⏳ Phase 1: Uploading to IPFS...";
             const fd = new FormData();
             fd.append('claim', claim);
             fd.append('file', file);
@@ -113,12 +141,20 @@ HTML_TEMPLATE = """
             try {
                 const res = await fetch('/verify', {method:'POST', body:fd});
                 const d = await res.json();
+                
                 if(d.success) {
-                    status.innerHTML = "✅ ARCHIVED SUCCESSFULLY";
-                    const history = JSON.parse(localStorage.getItem('chronos_v2') || '[]');
-                    history.push({claim, img: d.ipfs_url, tx: d.tx_hash, address: MY_ADDRESS, score: 98});
-                    localStorage.setItem('chronos_v2', JSON.stringify(history));
+                    status.innerHTML = "✅ ARCHIVED ON BASE";
+                    const history = JSON.parse(localStorage.getItem('chronos_final') || '[]');
+                    history.push({
+                        claim: claim,
+                        img: d.ipfs_url,
+                        tx: d.tx_hash,
+                        address: userAddress,
+                        score: 98
+                    });
+                    localStorage.setItem('chronos_final', JSON.stringify(history));
                     renderGallery();
+                    document.getElementById('claim').value = "";
                 } else { status.innerHTML = "❌ " + d.error; }
             } catch(e) { status.innerHTML = "❌ Network Error"; }
         }
@@ -130,8 +166,7 @@ HTML_TEMPLATE = """
 
 @app.route('/')
 def home():
-    # Kirim wallet address biar frontend bisa nampilin siapa pengirimnya
-    return render_template_string(HTML_TEMPLATE, wallet_address=account.address)
+    return render_template_string(HTML_TEMPLATE)
 
 @app.route('/verify', methods=['POST'])
 def verify():
@@ -140,9 +175,13 @@ def verify():
         file = request.files.get('file')
         ipfs_url = upload_to_ipfs(file)
         
-        nonce = w3.eth.get_transaction_count(account.address)
+        # Eksekusi transaksi dari sisi server (Admin pays gas)
+        nonce = w3.eth.get_transaction_count(admin_account.address)
         tx = contract.functions.verifyClaim(claim, 98, ipfs_url).build_transaction({
-            'from': account.address, 'nonce': nonce, 'gas': 300000, 'gasPrice': w3.to_wei('0.05', 'gwei')
+            'from': admin_account.address,
+            'nonce': nonce,
+            'gas': 300000,
+            'gasPrice': w3.to_wei('0.05', 'gwei')
         })
         signed = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
         tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
