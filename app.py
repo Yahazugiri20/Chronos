@@ -133,7 +133,7 @@ HTML_TEMPLATE = """
                 const d = await res.json();
 
                 if(d.success) {
-                    status.innerHTML = "✍️ Phase 2: Sign the transaction in MetaMask...";
+                    status.innerHTML = "✍️ Phase 2: Sign the transaction ..";
                     
                     // ONCHAIN INTERACTION VIA ETHERS.JS
                     const provider = new ethers.providers.Web3Provider(window.ethereum);
