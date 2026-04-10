@@ -7,16 +7,7 @@ load_dotenv()
 app = Flask(__name__)
 
 # --- CONFIG ---
-RPC_URL = os.getenv("RPC_URL")
-PRIVATE_KEY = os.getenv("PRIVATE_KEY")
-CONTRACT_ADDRESS = os.getenv("CONTRACT_ADDRESS")
 PINATA_JWT = os.getenv("PINATA_JWT")
-
-w3 = Web3(Web3.HTTPProvider(RPC_URL))
-admin_account = w3.eth.account.from_key(PRIVATE_KEY)
-
-ABI = [{"inputs":[{"internalType":"string","name":"_claim","type":"string"},{"internalType":"uint256","name":"_score","type":"uint256"},{"internalType":"string","name":"_hash","type":"string"}],"name":"verifyClaim","outputs":[],"stateMutability":"nonpayable","type":"function"}]
-contract = w3.eth.contract(address=CONTRACT_ADDRESS, abi=ABI)
 
 def upload_to_ipfs(file_obj):
     url = "https://api.pinata.cloud/pinning/pinFileToIPFS"
@@ -33,10 +24,11 @@ HTML_TEMPLATE = """
 <head>
     <title>Chronos | AI Historical Ledger</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
     <style>
         :root { --base-blue: #0052ff; --dark-bg: #000; --card-bg: #111; --border: #222; }
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--dark-bg); color: white; margin: 0; }
-        
+
         .nav { display: flex; justify-content: space-between; align-items: center; padding: 20px 40px; border-bottom: 1px solid var(--border); background: rgba(0,0,0,0.8); backdrop-filter: blur(10px); position: sticky; top: 0; z-index: 100; }
         .logo { font-weight: 800; font-size: 1.5em; letter-spacing: -1px; }
         .btn-connect { background: #fff; color: #000; border: none; padding: 10px 20px; border-radius: 50px; font-weight: bold; cursor: pointer; transition: 0.3s; }
@@ -89,6 +81,8 @@ HTML_TEMPLATE = """
 
     <script>
         let userAddress = null;
+        const CONTRACT_ADDRESS = "0xF5363562B480E1ba32a2192171eF395c99C1d39c";
+        const ABI = [{"inputs":[{"internalType":"string","name":"_claim","type":"string"},{"internalType":"uint256","name":"_score","type":"uint256"},{"internalType":"string","name":"_hash","type":"string"}],"name":"verifyClaim","outputs":[],"stateMutability":"nonpayable","type":"function"}];
 
         async function connectWallet() {
             if (window.ethereum) {
@@ -128,22 +122,37 @@ HTML_TEMPLATE = """
 
             if(!claim || !file) return alert("Please provide both a claim and an image.");
 
-            status.innerHTML = "⏳ Phase 1: Uploading evidence to IPFS...";
+            status.innerHTML = "⏳ Phase 1: Uploading to IPFS & Verifying...";
             const fd = new FormData();
             fd.append('claim', claim);
             fd.append('file', file);
 
             try {
+                // Backend handles IPFS upload only
                 const res = await fetch('/verify', {method:'POST', body:fd});
                 const d = await res.json();
 
                 if(d.success) {
+                    status.innerHTML = "✍️ Phase 2: Sign the transaction in MetaMask...";
+                    
+                    // ONCHAIN INTERACTION VIA ETHERS.JS
+                    const provider = new ethers.providers.Web3Provider(window.ethereum);
+                    const signer = provider.getSigner();
+                    const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+
+                    // Execute Contract Function (MetaMask pop-up will appear)
+                    const tx = await contract.verifyClaim(claim, 98, d.ipfs_url);
+                    
+                    status.innerHTML = "⛓️ Phase 3: Mining on Base... please wait.";
+                    const receipt = await tx.wait(); // Wait for block confirmation
+
                     status.innerHTML = "✅ SUCCESSFULLY ARCHIVED ON BASE";
+                    
                     const history = JSON.parse(localStorage.getItem('chronos_final') || '[]');
                     history.push({
                         claim: claim,
                         img: d.ipfs_url,
-                        tx: d.tx_hash,
+                        tx: receipt.transactionHash,
                         address: userAddress,
                         score: 98
                     });
@@ -151,7 +160,10 @@ HTML_TEMPLATE = """
                     renderGallery();
                     document.getElementById('claim').value = "";
                 } else { status.innerHTML = "❌ Error: " + d.error; }
-            } catch(e) { status.innerHTML = "❌ Network Error"; }
+            } catch(e) { 
+                console.error(e);
+                status.innerHTML = "❌ User rejected signature or network issue."; 
+            }
         }
         renderGallery();
     </script>
@@ -166,21 +178,10 @@ def home():
 @app.route('/verify', methods=['POST'])
 def verify():
     try:
-        claim = request.form.get('claim')
         file = request.files.get('file')
         ipfs_url = upload_to_ipfs(file)
-
-        nonce = w3.eth.get_transaction_count(admin_account.address)
-        tx = contract.functions.verifyClaim(claim, 98, ipfs_url).build_transaction({
-            'from': admin_account.address,
-            'nonce': nonce,
-            'gas': 300000,
-            'gasPrice': w3.to_wei('0.05', 'gwei')
-        })
-        signed = w3.eth.account.sign_transaction(tx, PRIVATE_KEY)
-        tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
-
-        return jsonify({"success": True, "tx_hash": w3.to_hex(tx_hash), "ipfs_url": ipfs_url})
+        # Backend handles file storage, frontend handles blockchain state
+        return jsonify({"success": True, "ipfs_url": ipfs_url})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
 
